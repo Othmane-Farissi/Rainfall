@@ -362,10 +362,3 @@ level5
 cat /home/user/level5/.pass
 0f99ba5e9c446258a69b290407a6c60859e9c2d25b26575cafc9ae6d75e9456a
 ```
-
-## Vulnerability Analysis
-
-### Root Cause:
-- **Format string vulnerability**: `printf(user_input)` in function `p()`
-- **Arbitrary memory write**: `%n` and `%hn` allow writing to any address
-- **Conditional execution**: System call triggered by specific memory value
