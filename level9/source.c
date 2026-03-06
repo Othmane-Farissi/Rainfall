@@ -1,16 +1,38 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <unistd.h>
+#include <cstring>
 
-int	run(void)
+class N {
+public:
+	int nb;
+	int (N::*func)(N &);
+	char annotation[100];
+
+	N(int val) : nb(val)
+	{
+		this->func = &N::operator+;
+	}
+	int operator+(N &right)
+	{
+		return this->nb + right.nb;
+	}
+	int operator-(N &right)
+	{
+		return this->nb - right.nb;
+	}
+	void setAnnotation(char *str)
+	{
+		memcpy(this->annotation, str, strlen(str));
+	}
+};
+
+int		main(int ac, char **av)
 {
-	fwrite("Good... Wait what?\n", 19, 1, stdout);
-	return (system("/bin/sh"));
-}
+	if (ac < 1)
+		_exit(1);
 
-int	main(void)
-{
-	char buffer[64];
+	N *a = new N(5);
+	N *b = new N(6);
 
-	gets(buffer);
-	return (0);
+	a->setAnnotation(av[1]);
+	return (b->*(b->func))(*a);
 }
