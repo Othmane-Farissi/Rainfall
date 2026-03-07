@@ -160,6 +160,20 @@ system("/bin/sh");
 
 ---
 
+**Note**
+- Why 0x804988c is a Global Variable
+- Memory Region Analysis
+- In 32-bit x86 Linux, memory is typically organized as:
+
+```text
+Address Range        | Region        | Description
+---------------------|---------------|--------------------
+0x08048000 - 0x0804xxxx | .text        | Program code
+0x0804xxxx - 0x08049xxx | .data/.bss   | Global variables
+0xbffxxxxx - 0xbfxxxxxx | Stack        | Local variables
+0xb7xxxxxx - 0xb8xxxxxx | Libraries    | Shared libraries
+```
+
 # Understanding Format String Exploitation
 
 ## How `%n` Works
